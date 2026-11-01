@@ -1,0 +1,101 @@
+name: APK Android
+
+# À chaque mise à jour de main : compile l'APK et le publie dans la release « Aperçu ».
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Une seule compilation à la fois : la plus récente remplace celle en attente.
+concurrency:
+  group: apk
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.3"
+
+jobs:
+  android:
+    name: Compiler l'APK
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Préparer Godot (modèles d'export, SDK, keystore)
+        shell: bash
+        run: |
+          set -e
+          mkdir -p ~/.local/share/godot/export_templates ~/.config/godot
+          if [ -d /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ] && [ "$HOME" != "/root" ]; then
+            cp -r /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/
+          fi
+          ls ~/.local/share/godot/export_templates/
+
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}"
+          echo "SDK Android : $SDK"
+          ls "$SDK"
+
+          KS="$HOME/debug.keystore"
+          keytool -genkeypair -v -keystore "$KS" -storepass android -alias androiddebugkey \
+            -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+          for f in editor_settings-4.tres editor_settings-4.3.tres; do
+            cat > ~/.config/godot/$f <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$SDK"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$KS"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+          done
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$KS" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
+
+      - name: Importer le projet
+        run: godot --headless --import --path . || true
+
+      - name: Exporter l'APK
+        shell: bash
+        run: |
+          mkdir -p build
+          godot --headless --verbose --path . --export-debug "Android" "$PWD/build/orbis.apk" 2>&1 | tail -60
+          ls -la build
+          test -s build/orbis.apk
+
+      - name: Garder l'APK (onglet Actions)
+        uses: actions/upload-artifact@v4
+        with:
+          name: orbis-apk
+          path: build/orbis.apk
+
+      - name: Publier dans la release « Aperçu »
+        uses: ncipollo/release-action@v1
+        with:
+          tag: apercu
+          name: Aperçu (dernière version)
+          body: |
+            APK de test généré automatiquement depuis la branche main (commit ${{ github.sha }}).
+            Sur ton téléphone : télécharge orbis.apk, ouvre-le, et autorise l'installation depuis cette source si Android le demande.
+          artifacts: build/orbis.apk
+          allowUpdates: true
+          replacesArtifacts: true
+          prerelease: true
+          makeLatest: true
+          commit: ${{ github.sha }}
