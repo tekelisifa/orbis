@@ -59,3 +59,7 @@ fonts/               Fredoka (licence OFL)
 - Exporter la vidéo de sa propre partie depuis le téléphone, pour la partager.
 - Thèmes et skins (planètes, animaux, bonbons), mélodies à débloquer.
 - Défi du jour, pub récompensée pour continuer, suppression des pubs.
+
+## Crédits sons
+
+- Miaulements (univers Chats) : « Miaulement de chat à la bouche », ID 0926, [La Sonothèque](https://lasonotheque.org), retravaillés (hauteur, grondement, écho) pour chaque taille de chat.

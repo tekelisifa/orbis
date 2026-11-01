@@ -21,8 +21,10 @@ var _pad: AudioStreamWAV
 var _meow: AudioStreamWAV
 var _mrrp: AudioStreamWAV
 var _purr: AudioStream
-## Vrais miaous (audio/miaou_1.ogg, miaou_2.ogg…) s'ils existent ; sinon miaou synthétique.
-var _meows: Array[AudioStream] = []
+## Vrais miaous préparés pour chaque taille (audio/chats/miaou_TT_V.ogg) : de plus en plus
+## graves, lents et « méchants » (grondement, saturation, écho de caverne).
+var _cat_meows: Array = []
+var _last_meow_ms := 0
 var _players: Array[AudioStreamPlayer] = []
 var _pad_player: AudioStreamPlayer
 var _melody_i := 0
@@ -45,10 +47,13 @@ func _ready() -> void:
 	_purr = _load_loop("res://audio/ronron.ogg")
 	if _purr == null:
 		_purr = _make_purr()
-	for i in range(1, 9):
-		var path := "res://audio/miaou_%d.ogg" % i
-		if ResourceLoader.exists(path):
-			_meows.append(load(path))
+	for t in 11:
+		var variants: Array[AudioStream] = []
+		for v in range(1, 4):
+			var path := "res://audio/chats/miaou_%02d_%d.ogg" % [t, v]
+			if ResourceLoader.exists(path):
+				variants.append(load(path))
+		_cat_meows.append(variants)
 	_pad_player = AudioStreamPlayer.new()
 	_pad_player.stream = _pad
 	_pad_player.volume_db = -20.0
@@ -126,13 +131,18 @@ func lose() -> void:
 ## Miaou (univers Chats). Plus le chat est gros, plus c'est grave et lent,
 ## jusqu'à devenir absurdement énorme pour le Roi des chats et le Chat cosmique.
 func meow(tier: int) -> void:
+	tier = clampi(tier, 0, 10)
+	var now := Time.get_ticks_msec()
+	# Les petits chats fusionnent souvent : on évite la cacophonie.
+	if tier < 6 and now - _last_meow_ms < 260:
+		return
+	_last_meow_ms = now
 	var u := tier / 10.0
-	var pitch := 1.6 * pow(0.2, pow(u, 1.3))  # 1,6 (chaton) → 0,32 (chat cosmique)
-	var db := lerpf(-9.0, 0.0, u)
-	var s: AudioStream = _meow
-	if not _meows.is_empty():
-		s = _meows[clampi(int(u * _meows.size()), 0, _meows.size() - 1)] if tier < 9 else _meows.pick_random()
-	_play(s, db, pitch * randf_range(0.96, 1.04))
+	var variants: Array = _cat_meows[tier] if tier < _cat_meows.size() else []
+	if variants.is_empty():
+		_play(_meow, lerpf(-9.0, 0.0, u), 1.6 * pow(0.2, pow(u, 1.3)))
+		return
+	_play(variants.pick_random(), lerpf(-8.0, 0.0, u), randf_range(0.97, 1.03))
 
 
 func _load_loop(path: String) -> AudioStream:
