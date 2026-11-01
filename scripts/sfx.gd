@@ -19,6 +19,8 @@ var _thump: AudioStreamWAV
 var _swell: AudioStreamWAV
 var _pad: AudioStreamWAV
 var _meow: AudioStreamWAV
+var _mrrp: AudioStreamWAV
+var _purr: AudioStreamWAV
 var _players: Array[AudioStreamPlayer] = []
 var _pad_player: AudioStreamPlayer
 var _melody_i := 0
@@ -37,13 +39,21 @@ func _ready() -> void:
 	_swell = _make_swell()
 	_pad = _make_pad()
 	_meow = _make_meow()
+	_mrrp = _make_mrrp()
+	_purr = _make_purr()
 	_pad_player = AudioStreamPlayer.new()
 	_pad_player.stream = _pad
 	_pad_player.volume_db = -20.0
 	add_child(_pad_player)
 
 
+## Nappe d'ambiance ; dans l'univers Chats, un ronronnement à la place.
 func start_ambience() -> void:
+	var want: AudioStreamWAV = _purr if Save.universe == "chats" else _pad
+	if _pad_player.stream != want:
+		_pad_player.stop()
+		_pad_player.stream = want
+		_pad_player.volume_db = -14.0 if want == _purr else -20.0
 	if Save.sound and not _pad_player.playing:
 		_pad_player.play()
 
@@ -70,6 +80,11 @@ func bounce(strength: float) -> void:
 	_last_note_ms = now
 	var idx: int = MELODY[_melody_i % MELODY.size()]
 	_melody_i += 1
+	if Save.universe == "chats":
+		# Petit « mrrp » de chat, sur la même mélodie.
+		var semi: int = SCALE[clampi(idx, 0, SCALE.size() - 1)]
+		_play(_mrrp, lerpf(-20.0, -9.0, clampf(strength, 0.0, 1.0)), pow(2.0, (semi - 9) / 12.0))
+		return
 	_play(_bells[clampi(idx, 0, _bells.size() - 1)], lerpf(-16.0, -5.0, clampf(strength, 0.0, 1.0)))
 
 
@@ -77,12 +92,18 @@ func bounce(strength: float) -> void:
 func merge(tier: int, combo: int) -> void:
 	var root := clampi(tier % 5 + mini(combo, 5), 0, _bells.size() - 5)
 	_play(_thump, -8.0, 1.0 + tier * 0.03)
+	if Save.universe == "chats":
+		return
 	for k in 3:
 		get_tree().create_timer(0.055 * k).timeout.connect(_play.bind(_bells[mini(root + k * 2, _bells.size() - 1)], -6.0 - k))
 
 
 func final_form() -> void:
 	_play(_swell, -3.0)
+	if Save.universe == "chats":
+		for k in 4:
+			get_tree().create_timer(0.16 * k).timeout.connect(_play.bind(_meow, -5.0, 0.8 + k * 0.18))
+		return
 	for k in 6:
 		get_tree().create_timer(0.09 * k).timeout.connect(_play.bind(_bells[mini(5 + k * 2, _bells.size() - 1)], -4.0))
 
@@ -205,3 +226,43 @@ func _make_meow() -> AudioStreamWAV:
 		var env := minf(1.0, t / 0.03) * pow(1.0 - u, 1.6)
 		s[i] = lp * env * 0.55
 	return _wav(s)
+
+
+## « Mrrp » : petit trille de chat (son roulé, hauteur qui monte), très court.
+func _make_mrrp() -> AudioStreamWAV:
+	var dur := 0.2
+	var n := int(RATE * dur)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var ph := 0.0
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var u := t / dur
+		ph += TAU * (380.0 + 260.0 * u) / RATE
+		var tone := sin(ph) + 0.5 * sin(ph * 2.0) + 0.25 * sin(ph * 3.0)
+		var roll := 0.55 + 0.45 * sin(TAU * 34.0 * t)
+		lp += 0.25 * (tone - lp)
+		var env := minf(1.0, t / 0.012) * pow(1.0 - u, 1.4)
+		s[i] = lp * roll * env * 0.5
+	return _wav(s)
+
+
+## Ronronnement en boucle : souffle grave pulsé ~25 fois par seconde, inspire / expire.
+func _make_purr() -> AudioStreamWAV:
+	var dur := 3.2
+	var n := int(RATE * dur)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var lp := 0.0
+	var lp2 := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var breath := 0.6 + 0.4 * sin(TAU * t / dur * 2.0)  # deux respirations par boucle
+		var rate := 24.0 if fmod(t, dur * 0.5) < dur * 0.28 else 27.0
+		var pulse := pow(maxf(0.0, sin(TAU * rate * t)), 3.0)
+		lp += 0.05 * ((randf() * 2.0 - 1.0) - lp)
+		lp2 += 0.1 * (lp - lp2)
+		var body := sin(TAU * 52.0 * t) * 0.4 + lp2 * 3.0
+		s[i] = body * pulse * breath * 0.5
+	return _wav(s, true)

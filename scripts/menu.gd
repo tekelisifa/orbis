@@ -108,6 +108,7 @@ func _universe_picker() -> Control:
 			Save.universe = key
 			Save.store()
 			Sfx.tick()
+			Sfx.start_ambience()
 			for o in buttons:
 				_style_pill(o))
 		buttons.append(b)
