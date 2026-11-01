@@ -20,7 +20,9 @@ var _swell: AudioStreamWAV
 var _pad: AudioStreamWAV
 var _meow: AudioStreamWAV
 var _mrrp: AudioStreamWAV
-var _purr: AudioStreamWAV
+var _purr: AudioStream
+## Vrais miaous (audio/miaou_1.ogg, miaou_2.ogg…) s'ils existent ; sinon miaou synthétique.
+var _meows: Array[AudioStream] = []
 var _players: Array[AudioStreamPlayer] = []
 var _pad_player: AudioStreamPlayer
 var _melody_i := 0
@@ -40,7 +42,13 @@ func _ready() -> void:
 	_pad = _make_pad()
 	_meow = _make_meow()
 	_mrrp = _make_mrrp()
-	_purr = _make_purr()
+	_purr = _load_loop("res://audio/ronron.ogg")
+	if _purr == null:
+		_purr = _make_purr()
+	for i in range(1, 9):
+		var path := "res://audio/miaou_%d.ogg" % i
+		if ResourceLoader.exists(path):
+			_meows.append(load(path))
 	_pad_player = AudioStreamPlayer.new()
 	_pad_player.stream = _pad
 	_pad_player.volume_db = -20.0
@@ -49,11 +57,11 @@ func _ready() -> void:
 
 ## Nappe d'ambiance ; dans l'univers Chats, un ronronnement à la place.
 func start_ambience() -> void:
-	var want: AudioStreamWAV = _purr if Save.universe == "chats" else _pad
+	var want: AudioStream = _purr if Save.universe == "chats" else _pad
 	if _pad_player.stream != want:
 		_pad_player.stop()
 		_pad_player.stream = want
-		_pad_player.volume_db = -14.0 if want == _purr else -20.0
+		_pad_player.volume_db = -10.0 if want == _purr else -20.0
 	if Save.sound and not _pad_player.playing:
 		_pad_player.play()
 
@@ -101,8 +109,10 @@ func merge(tier: int, combo: int) -> void:
 func final_form() -> void:
 	_play(_swell, -3.0)
 	if Save.universe == "chats":
-		for k in 4:
-			get_tree().create_timer(0.16 * k).timeout.connect(_play.bind(_meow, -5.0, 0.8 + k * 0.18))
+		# Un miaou géant, puis une réponse de petits chatons.
+		meow(10)
+		for k in 3:
+			get_tree().create_timer(1.1 + 0.18 * k).timeout.connect(meow.bind(k))
 		return
 	for k in 6:
 		get_tree().create_timer(0.09 * k).timeout.connect(_play.bind(_bells[mini(5 + k * 2, _bells.size() - 1)], -4.0))
@@ -113,9 +123,25 @@ func lose() -> void:
 		get_tree().create_timer(0.14 * k).timeout.connect(_play.bind(_bells[maxi(6 - k * 2, 0)], -7.0, 0.5))
 
 
-## Miaou (univers Chats) : plus grave pour les gros chats.
+## Miaou (univers Chats). Plus le chat est gros, plus c'est grave et lent,
+## jusqu'à devenir absurdement énorme pour le Roi des chats et le Chat cosmique.
 func meow(tier: int) -> void:
-	_play(_meow, -7.0, lerpf(1.45, 0.7, tier / 10.0) * randf_range(0.95, 1.05))
+	var u := tier / 10.0
+	var pitch := 1.6 * pow(0.2, pow(u, 1.3))  # 1,6 (chaton) → 0,32 (chat cosmique)
+	var db := lerpf(-9.0, 0.0, u)
+	var s: AudioStream = _meow
+	if not _meows.is_empty():
+		s = _meows[clampi(int(u * _meows.size()), 0, _meows.size() - 1)] if tier < 9 else _meows.pick_random()
+	_play(s, db, pitch * randf_range(0.96, 1.04))
+
+
+func _load_loop(path: String) -> AudioStream:
+	if not ResourceLoader.exists(path):
+		return null
+	var st: AudioStream = load(path)
+	if st is AudioStreamOggVorbis:
+		(st as AudioStreamOggVorbis).loop = true
+	return st
 
 
 func tick() -> void:
@@ -204,27 +230,37 @@ func _make_pad() -> AudioStreamWAV:
 	return _wav(s, true)
 
 
-## Petit « miaou » synthétique : hauteur qui monte puis redescend, timbre riche filtré.
+## Miaou synthétique par formants : la voix passe de « i » à « a » à « ou » (mi-a-ou),
+## hauteur qui monte puis retombe, léger vibrato et souffle. Remplacé par de vrais
+## enregistrements si audio/miaou_N.ogg existent.
 func _make_meow() -> AudioStreamWAV:
-	var dur := 0.42
+	var dur := 0.62
 	var n := int(RATE * dur)
 	var s := PackedFloat32Array()
 	s.resize(n)
 	var ph := 0.0
-	var lp := 0.0
+	var noise := 0.0
 	for i in n:
 		var t := float(i) / RATE
 		var u := t / dur
-		var hz := 520.0 + 380.0 * sin(minf(u * 1.25, 1.0) * PI) - 120.0 * u
-		ph += TAU * hz / RATE
-		var tone := 0.0
-		for h in 6:
-			tone += sin(ph * (h + 1)) / float(h + 1) * (1.0 if h < 3 else 0.5)
-		# Filtre qui s'ouvre (« m » → « iaou ») puis se referme.
-		var open := 0.05 + 0.4 * sin(minf(u * 1.4, 1.0) * PI)
-		lp += open * (tone - lp)
-		var env := minf(1.0, t / 0.03) * pow(1.0 - u, 1.6)
-		s[i] = lp * env * 0.55
+		var f0 := 560.0 + 260.0 * sin(minf(u * 1.5, 1.0) * PI * 0.9) - 160.0 * u * u
+		f0 *= 1.0 + 0.012 * sin(TAU * 6.0 * t)
+		ph += TAU * f0 / RATE
+		# Trajectoire des formants : i (début) → a (milieu) → ou (fin).
+		var a1 := smoothstep(0.0, 0.35, u)
+		var a2 := smoothstep(0.55, 1.0, u)
+		var F1 := lerpf(lerpf(420.0, 950.0, a1), 520.0, a2)
+		var F2 := lerpf(lerpf(2300.0, 1500.0, a1), 950.0, a2)
+		var v := 0.0
+		var h := 1
+		while h * f0 < 7000.0:
+			var fh := h * f0
+			var g := exp(-pow((fh - F1) / 260.0, 2.0)) + 0.7 * exp(-pow((fh - F2) / 340.0, 2.0)) + 0.18 * exp(-pow((fh - 3300.0) / 500.0, 2.0))
+			v += sin(ph * h) * g / sqrt(float(h))
+			h += 1
+		noise += 0.3 * ((randf() * 2.0 - 1.0) - noise)
+		var env := smoothstep(0.0, 0.06, u) * pow(1.0 - u, 1.2)
+		s[i] = (v * 0.42 + noise * 0.05 * (0.3 + a1)) * env
 	return _wav(s)
 
 
