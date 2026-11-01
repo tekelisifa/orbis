@@ -57,8 +57,9 @@ func _ready() -> void:
 	box.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	root.add_child(box)
 
-	box.add_child(_mode_button("ORBITE", "Fais tourner l'arène, garde les orbes dedans", "orbite", true))
-	box.add_child(_mode_button("CHUTE", "Vise, lâche, fusionne jusqu'à la supernova", "chute", false))
+	box.add_child(_universe_picker())
+	box.add_child(_mode_button("ORBITE", "Fais tourner l'arène, garde-les dedans", "orbite", true))
+	box.add_child(_mode_button("CHUTE", "Vise, lâche, fusionne jusqu'au sommet", "chute", false))
 
 	var sound := Button.new()
 	sound.flat = true
@@ -80,14 +81,63 @@ func UI_fade(c: Control) -> void:
 	c.create_tween().tween_property(c, "modulate:a", 1.0, 0.8).set_delay(0.4)
 
 
+## Choix de l'univers : deux pastilles, celle choisie est pleine.
+func _universe_picker() -> Control:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 16)
+	var lab := Label.new()
+	lab.text = "Univers"
+	lab.add_theme_font_override("font", Art.font)
+	lab.add_theme_font_size_override("font_size", 24)
+	lab.add_theme_color_override("font_color", Color(1, 1, 1, 0.65))
+	row.add_child(lab)
+	var buttons: Array[Button] = []
+	for key: String in Art.UNIVERSES:
+		var b := Button.new()
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(170, 64)
+		b.text = str(Art.UNIVERSES[key]["name"])
+		b.add_theme_font_override("font", Art.font_bold)
+		b.add_theme_font_size_override("font_size", 26)
+		b.set_meta("key", key)
+		b.pressed.connect(func() -> void:
+			if Save.universe == key:
+				return
+			Save.buzz(10)
+			Save.universe = key
+			Save.store()
+			Sfx.tick()
+			for o in buttons:
+				_style_pill(o))
+		buttons.append(b)
+		_style_pill(b)
+		row.add_child(b)
+	return row
+
+
+func _style_pill(b: Button) -> void:
+	var on: bool = Save.universe == str(b.get_meta("key"))
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(1, 1, 1, 0.9) if on else Color(1, 1, 1, 0.06)
+	sb.border_color = Color(1, 1, 1, 0.5)
+	sb.set_border_width_all(0 if on else 2)
+	sb.set_corner_radius_all(32)
+	sb.anti_aliasing = true
+	for st in ["normal", "hover", "pressed", "focus"]:
+		b.add_theme_stylebox_override(st, sb)
+	var fc := Color(0.06, 0.04, 0.14) if on else Color(1, 1, 1, 0.85)
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(c, fc)
+
+
+## Bouton de mode : titre + record sur une ligne, sous-titre court en dessous.
+## Les textes sont des Label rognés : rien ne peut déborder de l'écran.
 func _mode_button(title: String, sub: String, mode: String, primary: bool) -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(0, 132)
-	var best := int(Save.best.get(mode, 0))
-	b.text = "%s\n%s%s" % [title, sub, ("  ·  record %d" % best) if best > 0 else ""]
-	b.add_theme_font_override("font", Art.font_bold)
-	b.add_theme_font_size_override("font_size", 30)
+	b.clip_contents = true
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(1, 1, 1, 0.94) if primary else Color(1, 1, 1, 0.08)
 	sb.border_color = Color(1, 1, 1, 0.55)
@@ -97,8 +147,30 @@ func _mode_button(title: String, sub: String, mode: String, primary: bool) -> Bu
 	for st in ["normal", "hover", "pressed", "focus"]:
 		b.add_theme_stylebox_override(st, sb)
 	var fc := Color(0.06, 0.04, 0.14) if primary else Color.WHITE
-	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-		b.add_theme_color_override(c, fc)
+	var col := VBoxContainer.new()
+	col.set_anchors_preset(Control.PRESET_FULL_RECT)
+	col.offset_left = 28
+	col.offset_right = -28
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 2)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(col)
+	var best := int(Save.best.get(mode, 0))
+	var head := Label.new()
+	head.text = title + (("   ★ %d" % best) if best > 0 else "")
+	head.add_theme_font_override("font", Art.font_bold)
+	head.add_theme_font_size_override("font_size", 40)
+	var small := Label.new()
+	small.text = sub
+	small.add_theme_font_override("font", Art.font)
+	small.add_theme_font_size_override("font_size", 22)
+	for l: Label in [head, small]:
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		l.clip_text = true
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		l.add_theme_color_override("font_color", fc if l == head else Color(fc.r, fc.g, fc.b, 0.7))
+		col.add_child(l)
 	b.pressed.connect(func() -> void:
 		Save.buzz(15)
 		Save.next_mode = mode

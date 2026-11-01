@@ -7,6 +7,7 @@ var best := {"chute": 0, "orbite": 0}
 var discovered := 1
 var sound := true
 var haptics := true
+var universe := "cosmos"
 ## Valeurs de session (non sauvegardées).
 var next_mode := "orbite"
 var recording := false
@@ -21,6 +22,7 @@ func _ready() -> void:
 	discovered = int(cfg.get_value("progress", "discovered", 1))
 	sound = bool(cfg.get_value("options", "sound", true))
 	haptics = bool(cfg.get_value("options", "haptics", true))
+	universe = str(cfg.get_value("options", "universe", "cosmos"))
 
 
 func store() -> void:
@@ -30,6 +32,7 @@ func store() -> void:
 	cfg.set_value("progress", "discovered", discovered)
 	cfg.set_value("options", "sound", sound)
 	cfg.set_value("options", "haptics", haptics)
+	cfg.set_value("options", "universe", universe)
 	cfg.save(PATH)
 
 

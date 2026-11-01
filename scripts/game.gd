@@ -160,6 +160,8 @@ func _merge(a: Orb, b: Orb) -> void:
 	_burst(pos, col, 14 + nt * 2, 260.0 + nt * 20.0, 5.0 + nt * 0.4)
 	waves.append({"pos": pos, "r": o.r, "life": 1.0, "col": col, "w": 6.0 + nt})
 	Sfx.merge(nt, combo)
+	if Art.cats():
+		Sfx.meow(nt)
 	trauma = minf(1.0, trauma + 0.12 + nt * 0.03)
 	Save.buzz(10 + nt * 3)
 	_popup(pos + Vector2(0, -o.r - 10), "+%d" % pts, col, 34 + nt * 2)
@@ -178,7 +180,7 @@ func _final_form(pos: Vector2) -> void:
 	_burst(pos, Color.WHITE, 90, 700.0, 9.0)
 	for k in 3:
 		waves.append({"pos": pos, "r": 40.0 + k * 30.0, "life": 1.0 + k * 0.3, "col": Art.rainbow(k * 0.33), "w": 14.0})
-	_popup(pos + Vector2(0, -170), "SUPERNOVA !", Color.WHITE, 72)
+	_popup(pos + Vector2(0, -170), Art.final_text(), Color.WHITE, 72)
 	score += 200
 	_slowmo(0.3, 1.6)
 
@@ -192,7 +194,7 @@ func _big_bang(pos: Vector2) -> void:
 	for k in 5:
 		waves.append({"pos": pos, "r": 30.0 + k * 40.0, "life": 1.2 + k * 0.25, "col": Art.rainbow(k * 0.2), "w": 18.0})
 	_burst(pos, Color.WHITE, 160, 900.0, 10.0)
-	_popup(pos + Vector2(0, -150), "BIG BANG !", Color.WHITE, 84)
+	_popup(pos + Vector2(0, -150), Art.bang_text(), Color.WHITE, 84)
 	_slowmo(0.25, 2.2)
 
 

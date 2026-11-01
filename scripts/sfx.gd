@@ -18,6 +18,7 @@ var _bells: Array[AudioStreamWAV] = []
 var _thump: AudioStreamWAV
 var _swell: AudioStreamWAV
 var _pad: AudioStreamWAV
+var _meow: AudioStreamWAV
 var _players: Array[AudioStreamPlayer] = []
 var _pad_player: AudioStreamPlayer
 var _melody_i := 0
@@ -35,6 +36,7 @@ func _ready() -> void:
 	_thump = _make_thump()
 	_swell = _make_swell()
 	_pad = _make_pad()
+	_meow = _make_meow()
 	_pad_player = AudioStreamPlayer.new()
 	_pad_player.stream = _pad
 	_pad_player.volume_db = -20.0
@@ -88,6 +90,11 @@ func final_form() -> void:
 func lose() -> void:
 	for k in 4:
 		get_tree().create_timer(0.14 * k).timeout.connect(_play.bind(_bells[maxi(6 - k * 2, 0)], -7.0, 0.5))
+
+
+## Miaou (univers Chats) : plus grave pour les gros chats.
+func meow(tier: int) -> void:
+	_play(_meow, -7.0, lerpf(1.45, 0.7, tier / 10.0) * randf_range(0.95, 1.05))
 
 
 func tick() -> void:
@@ -174,3 +181,27 @@ func _make_pad() -> AudioStreamWAV:
 			v += sin(TAU * f * t) + 0.6 * sin(TAU * f * 1.003 * t)
 		s[i] = v * env * 0.06
 	return _wav(s, true)
+
+
+## Petit « miaou » synthétique : hauteur qui monte puis redescend, timbre riche filtré.
+func _make_meow() -> AudioStreamWAV:
+	var dur := 0.42
+	var n := int(RATE * dur)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var ph := 0.0
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var u := t / dur
+		var hz := 520.0 + 380.0 * sin(minf(u * 1.25, 1.0) * PI) - 120.0 * u
+		ph += TAU * hz / RATE
+		var tone := 0.0
+		for h in 6:
+			tone += sin(ph * (h + 1)) / float(h + 1) * (1.0 if h < 3 else 0.5)
+		# Filtre qui s'ouvre (« m » → « iaou ») puis se referme.
+		var open := 0.05 + 0.4 * sin(minf(u * 1.4, 1.0) * PI)
+		lp += open * (tone - lp)
+		var env := minf(1.0, t / 0.03) * pow(1.0 - u, 1.6)
+		s[i] = lp * env * 0.55
+	return _wav(s)
