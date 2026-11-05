@@ -44,6 +44,9 @@ var rot_vel := 0.0
 var spawn_t := 0.0
 var drag_angle := 0.0
 var dragging := false
+var _finger := -1
+## Écart maximal entre la cible et la rotation réelle : l'arène ne peut pas « s'emballer ».
+const MAX_LEAD := 0.8
 
 # Effets
 var parts_pos := PackedVector2Array()
@@ -402,6 +405,7 @@ func revive() -> void:
 		return
 	continued = true
 	over = false
+	_calm_arena()
 	for o in orbs.get_children():
 		var ob := o as Orb
 		var gone := ob.global_position.distance_to(center) > R - ob.r * 0.5
@@ -434,21 +438,47 @@ func _unhandled_input(event: InputEvent) -> void:
 				aim_x = p.x
 				_drop()
 		else:
-			dragging = e.pressed
-			drag_angle = (p - center).angle()
+			if e.pressed:
+				if _finger != -1:
+					return  # un seul doigt pilote l'arène
+				_finger = e.index
+				dragging = true
+				drag_angle = (p - center).angle()
+			elif e.index == _finger:
+				_stop_drag()
 	elif event is InputEventScreenDrag:
 		var d := event as InputEventScreenDrag
 		var p := _to_world(d.position)
 		if mode == "chute":
 			aim_x = p.x
-		elif dragging:
+		elif dragging and d.index == _finger:
 			var a := (p - center).angle()
 			var da := wrapf(a - drag_angle, -PI, PI)
 			# Loin du centre : on suit le doigt ; près du centre, glisser horizontalement fait tourner.
 			if (p - center).length() < 80.0:
 				da = d.relative.x * 0.008
-			rot_target += da
+			rot_target += clampf(da, -0.5, 0.5)
+			rot_target = clampf(rot_target, arena.rotation - MAX_LEAD, arena.rotation + MAX_LEAD)
 			drag_angle = a
+
+
+func _stop_drag() -> void:
+	dragging = false
+	_finger = -1
+
+
+## Retour d'une pub ou de l'arrière-plan : on oublie le doigt en cours et on stoppe l'arène,
+## sinon un relâchement perdu laisse une cible très loin et l'arène tourne à fond.
+func _notification(what: int) -> void:
+	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_APPLICATION_RESUMED, NOTIFICATION_APPLICATION_FOCUS_IN]:
+		_calm_arena()
+
+
+func _calm_arena() -> void:
+	_stop_drag()
+	if arena:
+		rot_target = arena.rotation
+	rot_vel = 0.0
 
 
 func _to_world(screen: Vector2) -> Vector2:
