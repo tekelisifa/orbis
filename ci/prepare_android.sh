@@ -11,6 +11,11 @@ ADMOB_VERSION="v5.1.0"     # poingstudios/godot-admob-plugin
 BILLING_VERSION="3.3.0"    # godot-sdk-integrations/godot-google-play-billing
 MINOR="${GODOT_VERSION%.*}"
 
+# Outils absents de l'image godot-ci
+if ! command -v curl >/dev/null || ! command -v unzip >/dev/null; then
+  apt-get update -qq && apt-get install -y -qq curl unzip ca-certificates >/dev/null
+fi
+
 # --- Godot : modèles, SDK, clés ---
 mkdir -p ~/.local/share/godot/export_templates ~/.config/godot
 if [ -d "/root/.local/share/godot/export_templates/${GODOT_VERSION}.stable" ] && [ "$HOME" != "/root" ]; then
