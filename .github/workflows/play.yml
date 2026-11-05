@@ -11,6 +11,10 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Numéro de version (ex. 1.0.0)"
+        required: false
 
 permissions:
   contents: write
@@ -54,7 +58,8 @@ jobs:
         shell: bash
         run: |
           # versionCode = numéro de compilation (toujours croissant) ; versionName = tag sans le « v »
-          NAME="${GITHUB_REF_NAME#v}"
+          NAME="${{ inputs.version }}"
+          [ -n "$NAME" ] || NAME="${GITHUB_REF_NAME#v}"
           case "$NAME" in [0-9]*) ;; *) NAME="0.1.$GITHUB_RUN_NUMBER" ;; esac
           CODE=$((100 + GITHUB_RUN_NUMBER))
           sed -i "s/^version\/code=.*/version\/code=$CODE/; s/^version\/name=.*/version\/name=\"$NAME\"/" export_presets.cfg
