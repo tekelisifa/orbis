@@ -2,6 +2,7 @@ name: Play Store (AAB)
 
 # Compile l'AAB signé pour le Play Store.
 # Déclenchement : pousser un tag « v1.0.0 » (ou lancer à la main depuis l'onglet Actions).
+# Pubs et achats : voir orbis/monetisation/active dans project.godot.
 # Secrets GitHub nécessaires (Settings → Secrets and variables → Actions) :
 #   UPLOAD_KEYSTORE_BASE64   la clé d'importation (.keystore) encodée en base64
 #   UPLOAD_KEYSTORE_PASSWORD son mot de passe
@@ -33,46 +34,21 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Préparer Godot (modèles d'export, SDK, clé d'importation)
+      - name: Vérifier les secrets
         shell: bash
         env:
           KS_B64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
-          KS_PASS: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
-          KS_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
         run: |
-          set -e
-          if [ -z "$KS_B64" ]; then echo "::error::Secret UPLOAD_KEYSTORE_BASE64 manquant"; exit 1; fi
-          mkdir -p ~/.local/share/godot/export_templates ~/.config/godot
-          if [ -d /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ] && [ "$HOME" != "/root" ]; then
-            cp -r /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/
-          fi
-          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}"
+          if [ -z "$KS_B64" ]; then echo "::error::Secret UPLOAD_KEYSTORE_BASE64 manquant (voir en haut de ce fichier)"; exit 1; fi
 
-          # Clé de debug (exigée par Godot même pour un export release)
-          DKS="$HOME/debug.keystore"
-          keytool -genkeypair -keystore "$DKS" -storepass android -alias androiddebugkey \
-            -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-
-          KS="$HOME/upload.keystore"
-          echo "$KS_B64" | base64 -d > "$KS"
-
-          for f in editor_settings-4.tres editor_settings-4.7.tres; do
-            cat > ~/.config/godot/$f <<EOS
-          [gd_resource type="EditorSettings" format=3]
-
-          [resource]
-          export/android/android_sdk_path = "$SDK"
-          export/android/java_sdk_path = "$JAVA_HOME"
-          export/android/debug_keystore = "$DKS"
-          export/android/debug_keystore_user = "androiddebugkey"
-          export/android/debug_keystore_pass = "android"
-          EOS
-          done
-          {
-            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$KS"
-            echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=$KS_ALIAS"
-            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$KS_PASS"
-          } >> "$GITHUB_ENV"
+      - name: Préparer Godot, la clé d'importation et les plugins Android
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UPLOAD_KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
+          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+        run: ci/prepare_android.sh
 
       - name: Numéro de version
         shell: bash
@@ -83,6 +59,30 @@ jobs:
           CODE=$((100 + GITHUB_RUN_NUMBER))
           sed -i "s/^version\/code=.*/version\/code=$CODE/; s/^version\/name=.*/version\/name=\"$NAME\"/" export_presets.cfg
           echo "Version $NAME ($CODE)"
+
+      - name: Monétisation (interrupteur orbis/monetisation/active)
+        shell: bash
+        run: |
+          # Écrit une clé dans la section [admob] de project.godot (la crée si besoin).
+          admob_set() {
+            sed -i "\\|^$1=|d" project.godot
+            grep -q '^\[admob\]' project.godot || printf '\n[admob]\n' >> project.godot
+            sed -i "/^\[admob\]/a $1=$2" project.godot
+          }
+          if grep -q '^monetisation/active=true' project.godot; then
+            if grep -E '^monetisation/(admob_app_id|rewarded_id|interstitial_id)=' project.godot | grep -q 3940256099942544; then
+              echo "::error::Monétisation active mais identifiants AdMob de test : remplace-les dans project.godot"
+              exit 1
+            fi
+            APP="$(grep '^monetisation/admob_app_id=' project.godot | cut -d= -f2-)"
+            admob_set general/android/enabled true
+            admob_set general/android/app_id "$APP"
+            echo "Monétisation ACTIVE (AdMob $APP)"
+          else
+            admob_set general/android/enabled false
+            echo "Monétisation désactivée : AAB sans pubs ni achats"
+          fi
+          sed -n '/^\[admob\]/,/^\[/p' project.godot
 
       - name: Importer le projet
         run: godot --headless --import --path . || true

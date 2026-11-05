@@ -21,6 +21,8 @@ var score := 0
 var combo := 0
 var lives := 3
 var over := false
+## Deuxième chance déjà utilisée (une seule par partie).
+var continued := false
 var time := 0.0
 
 var arena: Arena
@@ -392,6 +394,29 @@ func _game_over() -> void:
 	var record_best := Save.submit(mode, score)
 	if ui:
 		ui.show_game_over(score, int(Save.best[mode]), record_best)
+
+
+## Deuxième chance : vide le haut de la pile (Chute) ou rend 2 vies (Orbite).
+func revive() -> void:
+	if not over or continued:
+		return
+	continued = true
+	over = false
+	for o in orbs.get_children():
+		var ob := o as Orb
+		var gone := ob.global_position.distance_to(center) > R - ob.r * 0.5
+		if mode == "chute":
+			gone = gone or ob.global_position.y < center.y + R * 0.1
+		if gone:
+			_burst(ob.global_position, Art.color(ob.tier), 10, 260.0, 5.0)
+			ob.queue_free()
+	if mode == "chute":
+		danger = 0.0
+	else:
+		lives = 2
+	trauma = minf(1.0, trauma + 0.3)
+	Save.buzz(40)
+	_popup(center + Vector2(0, -R - 70), "Deuxième chance !", Color("7fffd4"), 48)
 
 
 # --- Contrôles ---

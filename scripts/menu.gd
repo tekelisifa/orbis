@@ -6,6 +6,7 @@ const Game := preload("res://scripts/game.gd")
 var _demo: Node2D
 var _title: Control
 var _t := 0.0
+var _shop: VBoxContainer
 
 
 func _ready() -> void:
@@ -73,7 +74,50 @@ func _ready() -> void:
 		Save.store()
 		sound.text = "Son : activé" if Save.sound else "Son : coupé")
 	box.add_child(sound)
+
+	_shop = VBoxContainer.new()
+	_shop.add_theme_constant_override("separation", 6)
+	box.add_child(_shop)
+	_refresh_shop()
+	Money.changed.connect(_refresh_shop)
 	UI_fade(box)
+
+
+## Achat « sans pub », politique de confidentialité, consentement pubs.
+func _refresh_shop() -> void:
+	for c in _shop.get_children():
+		c.queue_free()
+	if Money.can_buy():
+		var buy := _small_button("Retirer les pubs" + ("  ·  " + Money.price if Money.price != "" else ""), 26, 0.9)
+		buy.pressed.connect(Money.buy)
+		_shop.add_child(buy)
+	elif Save.no_ads and Money.enabled:
+		var thanks := _small_button("Merci pour ton soutien ♥", 22, 0.6)
+		thanks.disabled = true
+		_shop.add_child(thanks)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 30)
+	_shop.add_child(row)
+	var privacy := _small_button("Confidentialité", 20, 0.45)
+	privacy.pressed.connect(Money.open_privacy_policy)
+	row.add_child(privacy)
+	if Money.privacy_options_required():
+		var consent := _small_button("Consentement pubs", 20, 0.45)
+		consent.pressed.connect(Money.show_privacy_options)
+		row.add_child(consent)
+
+
+func _small_button(text: String, size: int, alpha: float) -> Button:
+	var b := Button.new()
+	b.flat = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.text = text
+	b.add_theme_font_override("font", Art.font)
+	b.add_theme_font_size_override("font_size", size)
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_disabled_color"]:
+		b.add_theme_color_override(c, Color(1, 1, 1, alpha))
+	return b
 
 
 func UI_fade(c: Control) -> void:

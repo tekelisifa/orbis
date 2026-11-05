@@ -50,15 +50,48 @@ scripts/game.gd      une partie : physique, fusions, combos, effets, modes, IA d
 scripts/arena.gd     l'anneau néon et son ouverture
 scripts/ball.gd      un orbe (corps physique, visage animé, traînée)
 scripts/game_ui.gd   score, record, prochain orbe, vies, chaîne d'évolution, fin de partie
-scripts/menu.gd      menu avec une partie qui se joue en fond
+scripts/menu.gd      menu avec une partie qui se joue en fond, achat « sans pub », confidentialité
+scripts/money.gd     monétisation : pubs, deuxième chance, achat « sans pub »
+scripts/ads_admob.gd pubs AdMob et consentement (chargé seulement sur Android)
 fonts/               Fredoka (licence OFL)
 ```
+
+## Monétisation
+
+- **Continuer** : après une défaite, une pub récompensée offre une deuxième chance (une par partie).
+  Chute : le haut de la pile est vidé. Orbite : 2 vies rendues.
+- **Pub entre les parties** : une toutes les 3 parties.
+- **Retirer les pubs** (achat unique, produit `sans_pub`) : plus de pub entre les parties, « continuer » gratuit.
+  L'achat est restauré automatiquement après une réinstallation.
+- Consentement RGPD au premier lancement (Google UMP), modifiable depuis le menu.
+
+Tout passe par `scripts/money.gd`. L'interrupteur est `orbis/monetisation/active` dans `project.godot` :
+
+| | APK de test (release « Aperçu ») | AAB Play Store |
+|---|---|---|
+| `active=false` | pubs **de test** Google + achat simulé | ni pubs ni achats (AdMob non inclus) |
+| `active=true` | pubs de test | vraies pubs et achat — les identifiants `monetisation/*_id` doivent être les vrais, sinon la CI refuse |
+
+Sur PC (debug), pubs et achat sont simulés pour tester l'interface.
+
+## Publier sur le Play Store
+
+1. Secrets GitHub (Settings → Secrets and variables → Actions) : `UPLOAD_KEYSTORE_BASE64`, `UPLOAD_KEYSTORE_PASSWORD`, `UPLOAD_KEY_ALIAS`.
+2. Pousser un tag : `git tag v1.0.0 && git push origin v1.0.0` → l'AAB signé est joint à la release du tag.
+3. Importer `orbis.aab` dans la Play Console (signature d'application gérée par Google).
+
+Plugins Android (téléchargés par `ci/prepare_android.sh`) : [AdMob de Poing Studios](https://github.com/poingstudios/godot-admob-plugin) et [Google Play Billing](https://github.com/godot-sdk-integrations/godot-google-play-billing).
+
+## Politique de confidentialité
+
+`docs/confidentialite.html`, publiée par GitHub Pages (branche `main`, dossier `/docs`) :
+https://tekelisifa.github.io/orbis/confidentialite.html — bouton « Confidentialité » dans le menu.
 
 ## À venir
 
 - Exporter la vidéo de sa propre partie depuis le téléphone, pour la partager.
 - Thèmes et skins (planètes, animaux, bonbons), mélodies à débloquer.
-- Défi du jour, pub récompensée pour continuer, suppression des pubs.
+- Défi du jour.
 
 ## Crédits sons
 

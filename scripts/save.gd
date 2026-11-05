@@ -8,6 +8,8 @@ var discovered := 1
 var sound := true
 var haptics := true
 var universe := "cosmos"
+## Achat « sans pub » (restauré aussi depuis Google Play au démarrage).
+var no_ads := false
 ## Valeurs de session (non sauvegardées).
 var next_mode := "orbite"
 var recording := false
@@ -23,6 +25,7 @@ func _ready() -> void:
 	sound = bool(cfg.get_value("options", "sound", true))
 	haptics = bool(cfg.get_value("options", "haptics", true))
 	universe = str(cfg.get_value("options", "universe", "cosmos"))
+	no_ads = bool(cfg.get_value("shop", "no_ads", false))
 
 
 func store() -> void:
@@ -33,6 +36,7 @@ func store() -> void:
 	cfg.set_value("options", "sound", sound)
 	cfg.set_value("options", "haptics", haptics)
 	cfg.set_value("options", "universe", universe)
+	cfg.set_value("shop", "no_ads", no_ads)
 	cfg.save(PATH)
 
 

@@ -1,6 +1,6 @@
 name: APK Android
 
-# À chaque mise à jour de main : compile l'APK et le publie dans la release « Aperçu ».
+# À chaque mise à jour de main : compile l'APK de test et le publie dans la release « Aperçu ».
 on:
   push:
     branches: [main]
@@ -33,40 +33,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Préparer Godot (modèles d'export, SDK, keystore)
+      - name: Préparer Godot et les plugins Android
         shell: bash
-        run: |
-          set -e
-          mkdir -p ~/.local/share/godot/export_templates ~/.config/godot
-          if [ -d /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ] && [ "$HOME" != "/root" ]; then
-            cp -r /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/
-          fi
-          ls ~/.local/share/godot/export_templates/
-
-          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}"
-          echo "SDK Android : $SDK"
-          ls "$SDK"
-
-          KS="$HOME/debug.keystore"
-          keytool -genkeypair -v -keystore "$KS" -storepass android -alias androiddebugkey \
-            -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
-
-          for f in editor_settings-4.tres editor_settings-4.7.tres; do
-            cat > ~/.config/godot/$f <<EOF
-          [gd_resource type="EditorSettings" format=3]
-
-          [resource]
-          export/android/android_sdk_path = "$SDK"
-          export/android/java_sdk_path = "$JAVA_HOME"
-          export/android/debug_keystore = "$KS"
-          export/android/debug_keystore_user = "androiddebugkey"
-          export/android/debug_keystore_pass = "android"
-          EOF
-          done
-          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$KS" >> "$GITHUB_ENV"
-          echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> "$GITHUB_ENV"
-          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ci/prepare_android.sh
 
       - name: Importer le projet
         run: godot --headless --import --path . || true
@@ -75,7 +46,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p build
-          godot --headless --verbose --path . --export-debug "Android" "$PWD/build/orbis.apk" 2>&1 | tail -60
+          godot --headless --verbose --path . --install-android-build-template --export-debug "Android" "$PWD/build/orbis.apk" 2>&1 | tail -80
           ls -la build
           test -s build/orbis.apk
 

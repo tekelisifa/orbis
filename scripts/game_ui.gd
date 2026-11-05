@@ -155,21 +155,47 @@ func show_game_over(score: int, best: int, is_record: bool) -> void:
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 30)
 	box.add_child(spacer)
-	var again := _button("REJOUER", 40, true)
+	if not game.record and not game.continued and Money.can_continue():
+		var cont := _button("CONTINUER" if Save.no_ads else "CONTINUER  ▶ PUB", 36, true)
+		cont.custom_minimum_size = Vector2(0, 104)
+		cont.add_theme_color_override("font_color", Color(0.06, 0.04, 0.14))
+		var csb := cont.get_theme_stylebox("normal").duplicate() as StyleBoxFlat
+		csb.bg_color = Color("7fffd4")
+		for st in ["normal", "hover", "pressed", "focus"]:
+			cont.add_theme_stylebox_override(st, csb)
+		cont.pressed.connect(func() -> void:
+			cont.disabled = true
+			Money.request_continue(func(ok: bool) -> void:
+				if ok:
+					_hide_game_over()
+					game.revive()
+				else:
+					cont.queue_free()))
+		box.add_child(cont)
+	var again := _button("REJOUER", 40, not Money.can_continue() or game.continued)
 	again.custom_minimum_size = Vector2(0, 110)
 	again.pressed.connect(func() -> void:
+		Money.after_game()
 		Save.next_mode = game.mode
 		get_tree().reload_current_scene())
 	box.add_child(again)
 	var menu := _button("MENU", 34)
 	menu.custom_minimum_size = Vector2(0, 96)
-	menu.pressed.connect(_to_menu)
+	menu.pressed.connect(func() -> void:
+		Money.after_game()
+		_to_menu())
 	box.add_child(menu)
 	box.modulate.a = 0.0
 	box.scale = Vector2(0.9, 0.9)
 	var tw := box.create_tween().set_parallel()
 	tw.tween_property(box, "modulate:a", 1.0, 0.4).set_delay(0.5)
 	tw.tween_property(box, "scale", Vector2.ONE, 0.5).set_delay(0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _hide_game_over() -> void:
+	for c in _over.get_children():
+		c.queue_free()
+	_over.visible = false
 
 
 func _to_menu() -> void:
