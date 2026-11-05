@@ -1,0 +1,110 @@
+name: Play Store (AAB)
+
+# Compile l'AAB signé pour le Play Store.
+# Déclenchement : pousser un tag « v1.0.0 » (ou lancer à la main depuis l'onglet Actions).
+# Secrets GitHub nécessaires (Settings → Secrets and variables → Actions) :
+#   UPLOAD_KEYSTORE_BASE64   la clé d'importation (.keystore) encodée en base64
+#   UPLOAD_KEYSTORE_PASSWORD son mot de passe
+#   UPLOAD_KEY_ALIAS         son alias
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: "4.7.2"
+
+jobs:
+  aab:
+    name: Compiler l'AAB
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.7.2
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Préparer Godot (modèles d'export, SDK, clé d'importation)
+        shell: bash
+        env:
+          KS_B64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+        run: |
+          set -e
+          if [ -z "$KS_B64" ]; then echo "::error::Secret UPLOAD_KEYSTORE_BASE64 manquant"; exit 1; fi
+          mkdir -p ~/.local/share/godot/export_templates ~/.config/godot
+          if [ -d /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ] && [ "$HOME" != "/root" ]; then
+            cp -r /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/
+          fi
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}"
+
+          # Clé de debug (exigée par Godot même pour un export release)
+          DKS="$HOME/debug.keystore"
+          keytool -genkeypair -keystore "$DKS" -storepass android -alias androiddebugkey \
+            -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
+          KS="$HOME/upload.keystore"
+          echo "$KS_B64" | base64 -d > "$KS"
+
+          for f in editor_settings-4.tres editor_settings-4.7.tres; do
+            cat > ~/.config/godot/$f <<EOS
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$SDK"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$DKS"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOS
+          done
+          {
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$KS"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=$KS_ALIAS"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$KS_PASS"
+          } >> "$GITHUB_ENV"
+
+      - name: Numéro de version
+        shell: bash
+        run: |
+          # versionCode = numéro de compilation (toujours croissant) ; versionName = tag sans le « v »
+          NAME="${GITHUB_REF_NAME#v}"
+          case "$NAME" in [0-9]*) ;; *) NAME="0.1.$GITHUB_RUN_NUMBER" ;; esac
+          CODE=$((100 + GITHUB_RUN_NUMBER))
+          sed -i "s/^version\/code=.*/version\/code=$CODE/; s/^version\/name=.*/version\/name=\"$NAME\"/" export_presets.cfg
+          echo "Version $NAME ($CODE)"
+
+      - name: Importer le projet
+        run: godot --headless --import --path . || true
+
+      - name: Exporter l'AAB
+        shell: bash
+        run: |
+          mkdir -p build
+          godot --headless --verbose --path . --install-android-build-template --export-release "Android Play" "$PWD/build/orbis.aab" 2>&1 | tail -80
+          ls -la build
+          test -s build/orbis.aab
+
+      - name: Garder l'AAB (onglet Actions)
+        uses: actions/upload-artifact@v4
+        with:
+          name: orbis-aab
+          path: build/orbis.aab
+
+      - name: Joindre l'AAB à la release du tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: build/orbis.aab
+          allowUpdates: true
+          generateReleaseNotes: true

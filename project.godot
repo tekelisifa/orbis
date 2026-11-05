@@ -1,5 +1,5 @@
 ; Orbis — jeu de fusion d'orbes dans une arène néon
-; Godot 4.3 (Android, portrait)
+; Godot 4.7 (Android, portrait)
 
 config_version=5
 
@@ -8,7 +8,7 @@ config_version=5
 config/name="Orbis"
 config/description="Fusionne les orbes, fais tourner l'arène, atteins la forme finale."
 run/main_scene="res://scenes/menu.tscn"
-config/features=PackedStringArray("4.3", "GL Compatibility")
+config/features=PackedStringArray("4.7", "GL Compatibility")
 boot_splash/bg_color=Color(0.016, 0.02, 0.05, 1)
 boot_splash/show_image=false
 config/icon="res://icon.svg"

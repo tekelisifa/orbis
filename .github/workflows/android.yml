@@ -15,14 +15,14 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GODOT_VERSION: "4.3"
+  GODOT_VERSION: "4.7.2"
 
 jobs:
   android:
     name: Compiler l'APK
     runs-on: ubuntu-latest
     container:
-      image: barichello/godot-ci:4.3
+      image: barichello/godot-ci:4.7.2
     steps:
       - name: Récupérer le code
         uses: actions/checkout@v4
@@ -52,7 +52,7 @@ jobs:
             -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
 
-          for f in editor_settings-4.tres editor_settings-4.3.tres; do
+          for f in editor_settings-4.tres editor_settings-4.7.tres; do
             cat > ~/.config/godot/$f <<EOF
           [gd_resource type="EditorSettings" format=3]
 
